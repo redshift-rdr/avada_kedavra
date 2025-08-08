@@ -1,0 +1,56 @@
+# config.yaml - Example with request filtering per rule
+
+rules:
+  - filter: # Rule 1: Only apply to POST requests to /api/Users/
+      method: POST
+    target:
+      type: body
+      name: email
+    payloads:
+      type: file
+      source: 'emails.txt'
+
+  # - filter: # Rule 2: Only apply to requests with an Authorization header
+  #     header_present: Authorization
+  #   target:
+  #     type: header
+  #     name: User-Agent
+  #   payloads:
+  #     type: list
+  #     source:
+  #       - 'AuthenticatedClient/1.0'
+  #       - 'SecretAgent/007'
+
+  # - filter: # Rule 3: Only apply to GET requests containing '/products/' in the URL
+  #     method: GET
+  #     url_contains: /products/
+  #   target:
+  #     type: url
+  #     name: q # Target the 'q' parameter in product search
+  #   payloads:
+  #     type: list
+  #     source: [ 'apple', 'banana', '<script>xss</script>' ]
+
+  # - filter: # Rule 4: Apply to requests where Content-Type header contains 'json'
+  #     header_value_contains:
+  #       Content-Type: application/json
+  #   target:
+  #     type: body
+  #     name: email
+  #   payloads:
+  #     type: single
+  #     source: 'This email was injected!'
+
+  # - target: # Rule 5: No filter - applies to all requests where 'language' cookie exists
+  #     type: cookie
+  #     name: language
+  #   payloads:
+  #     type: list
+  #     source: [ 'fr', 'de', 'es' ]
+
+# --- Optional Settings (remain the same) ---
+# threads: 10
+# delay: 0.1
+# allow_redirects: False
+# verify_ssl: False
+# timeout: 15
