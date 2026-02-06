@@ -1,0 +1,46 @@
+[
+  {
+    "id": 1,
+    "payload": "test@example.com",
+    "method": "POST",
+    "url": "https://httpbin.org/post",
+    "status_code": 200,
+    "content_length": 557,
+    "response_time": "0.210",
+    "error": "",
+    "conditions_matched": "Body:'email' | Status=200 | Size>100"
+  },
+  {
+    "id": 2,
+    "payload": "admin@test.com",
+    "method": "POST",
+    "url": "https://httpbin.org/post",
+    "status_code": 200,
+    "content_length": 553,
+    "response_time": "0.818",
+    "error": "",
+    "conditions_matched": "Body:'email' | Status=200 | Size>100"
+  },
+  {
+    "id": 3,
+    "payload": "user@domain.com",
+    "method": "POST",
+    "url": "https://httpbin.org/post",
+    "status_code": 200,
+    "content_length": 555,
+    "response_time": "0.321",
+    "error": "",
+    "conditions_matched": "Body:'email' | Status=200 | Size>100"
+  },
+  {
+    "id": 4,
+    "payload": "fuzz@security.test",
+    "method": "POST",
+    "url": "https://httpbin.org/post",
+    "status_code": 200,
+    "content_length": 561,
+    "response_time": "0.822",
+    "error": "",
+    "conditions_matched": "Body:'email' | Status=200 | Size>100"
+  }
+]

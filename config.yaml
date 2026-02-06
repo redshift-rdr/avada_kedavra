@@ -1,7 +1,27 @@
-# config.yaml - Example with request filtering per rule
+# config.yaml - Example with request filtering per rule and response conditions
 
 rules:
-  - filter: # Rule 1: Only apply to POST requests to /api/Users/
+  # Rule 1: Test HTTP method enumeration (NEW!)
+  - filter:
+      url_contains: /api/
+    target:
+      type: method  # No 'name' field needed for method
+    payloads:
+      type: list
+      source:
+        - GET
+        - POST
+        - PUT
+        - DELETE
+        - PATCH
+        - OPTIONS
+        - HEAD
+    conditions:
+      match_mode: "any"
+      status_code: [200, 201, 204]  # Success responses
+
+  # Rule 2: Test email injection with response conditions (ANY mode - default)
+  - filter:
       method: POST
     target:
       type: body
@@ -9,48 +29,132 @@ rules:
     payloads:
       type: file
       source: 'emails.txt'
+    conditions:
+      match_mode: "any"        # Show if ANY condition matches (default behavior)
+      status_code: [200, 201]  # Check for successful responses
+      string_in_body: "email"  # Look for "email" in response body
+      content_length_gt: 100   # Response larger than 100 bytes
 
-  # - filter: # Rule 2: Only apply to requests with an Authorization header
-  #     header_present: Authorization
+  # Rule 2: SQLi testing with ALL mode (only show if ALL conditions match)
+  # - filter:
+  #     method: GET
+  #     url_contains: /search
   #   target:
-  #     type: header
-  #     name: User-Agent
+  #     type: url
+  #     name: q
   #   payloads:
   #     type: list
   #     source:
-  #       - 'AuthenticatedClient/1.0'
-  #       - 'SecretAgent/007'
+  #       - "' OR '1'='1"
+  #       - "admin'--"
+  #       - "' UNION SELECT NULL--"
+  #   conditions:
+  #     match_mode: "all"  # Only show if ALL conditions match
+  #     regex_in_body: "error|exception|syntax"  # Look for SQL errors
+  #     status_code: 500  # Must be error status
+  #     content_length_gt: 50  # Must have substantial error message
 
-  # - filter: # Rule 3: Only apply to GET requests containing '/products/' in the URL
-  #     method: GET
-  #     url_contains: /products/
-  #   target:
-  #     type: url
-  #     name: q # Target the 'q' parameter in product search
-  #   payloads:
-  #     type: list
-  #     source: [ 'apple', 'banana', '<script>xss</script>' ]
-
-  # - filter: # Rule 4: Apply to requests where Content-Type header contains 'json'
-  #     header_value_contains:
-  #       Content-Type: application/json
+  # Rule 3: XSS testing with response time conditions
+  # - filter:
+  #     method: POST
+  #     url_path_contains: /comment
   #   target:
   #     type: body
-  #     name: email
-  #   payloads:
-  #     type: single
-  #     source: 'This email was injected!'
-
-  # - target: # Rule 5: No filter - applies to all requests where 'language' cookie exists
-  #     type: cookie
-  #     name: language
+  #     name: message
   #   payloads:
   #     type: list
-  #     source: [ 'fr', 'de', 'es' ]
+  #     source:
+  #       - '<script>alert(1)</script>'
+  #       - '<img src=x onerror=alert(1)>'
+  #   conditions:
+  #     string_in_body: "<script>"  # Check if script tag appears in response
+  #     response_time_lt: 2.0  # Response faster than 2 seconds
 
-# --- Optional Settings (remain the same) ---
+  # Rule 4: Header fuzzing with header condition matching
+  # - target:
+  #     type: header
+  #     name: X-Forwarded-For
+  #   payloads:
+  #     type: list
+  #     source: ['127.0.0.1', '192.168.1.1', 'localhost']
+  #   conditions:
+  #     string_in_headers: "X-Real-IP"  # Check if server reflects the header
+  #     content_length_lt: 1000  # Small responses only
+
+  # Rule 5: Cookie manipulation with multiple conditions
+  # - target:
+  #     type: cookie
+  #     name: session_id
+  #   payloads:
+  #     type: list
+  #     source: ['admin', 'test123', 'guest']
+  #   conditions:
+  #     status_code: 200
+  #     string_in_body: "Welcome"
+  #     content_length_gt: 500
+  #     response_time_gt: 0.1
+
+# --- Optional Global Settings ---
 # threads: 10
 # delay: 0.1
 # allow_redirects: False
 # verify_ssl: False
 # timeout: 15
+
+# --- Phase 1 Security Testing Features ---
+# Enable via CLI arguments:
+#   --baseline-mode          Capture baseline responses without fuzzing
+#   --baseline-file FILE     Path to baseline file (default: baselines.json)
+#   --diff-analysis          Compare fuzzed responses against baselines
+#   --detect-reflection      Detect if payloads are reflected (XSS testing)
+#   --auto-throttle          Automatically detect and adapt to rate limiting
+#   --waf-detect             Detect Web Application Firewall presence
+#
+# Workflow Example:
+#   1. Capture baselines:  python -m avada_kedavra requests.json --baseline-mode
+#   2. Fuzz with analysis: python -m avada_kedavra requests.json -c config.yaml --diff-analysis --detect-reflection
+#
+# Differential Analysis:
+#   - Compares response size, timing, status codes against baseline
+#   - Detects new error messages introduced by payloads
+#   - Calculates similarity ratio to find anomalies
+#   - Highlights: Δ200→500 | Size+234B | Time+15% | ERR!
+#
+# Reflection Detection:
+#   - Checks if payload appears in response body or headers
+#   - Detects HTML, URL, and JavaScript encoding
+#   - Shows: Reflected(body) | Reflected(both) [html]
+#
+# Auto-Throttle:
+#   - Detects 429/503 status codes and rate limit keywords
+#   - Automatically increases delay between requests
+#   - Backs off exponentially until rate limit clears
+#
+# WAF Detection:
+#   - Identifies common WAF signatures (Cloudflare, Akamai, etc.)
+#   - Shows: WAF:CLOUDFLARE | WAF:MODSECURITY
+
+# --- Response Conditions Reference ---
+# Conditions can be added to any rule to check response characteristics.
+# When a condition matches, it will be displayed in the "Error/Conditions" column.
+#
+# Match Modes:
+#   match_mode: "any" (default)     - Show if ANY condition matches (OR logic)
+#   match_mode: "all"               - Only show if ALL conditions match (AND logic)
+#
+# Available conditions:
+#   string_in_body: "text"          - Check if string exists in response body
+#   string_in_headers: "text"       - Check if string exists in response headers
+#   regex_in_body: "pattern"        - Match regex pattern in response body
+#   regex_in_headers: "pattern"     - Match regex pattern in response headers
+#   status_code: 200 or [200, 201]  - Match specific status code(s)
+#   content_length_gt: 1000         - Response size greater than N bytes
+#   content_length_lt: 1000         - Response size less than N bytes
+#   content_length_eq: 1000         - Response size equals N bytes
+#   response_time_gt: 0.5           - Response time greater than N seconds
+#   response_time_lt: 2.0           - Response time less than N seconds
+#
+# Examples:
+#   match_mode: "any" - Shows "✓ Body:'error' | Status=500" (both matched)
+#   match_mode: "all" - Shows "✓ Body:'error' | Status=500" (only if ALL 3+ conditions matched)
+#                       Otherwise shows nothing if not all conditions met

@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Avada Kedavra Fuzzing Report</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        h1 { color: #333; }
+        .info { background: #fff; padding: 15px; margin-bottom: 20px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        table { width: 100%; border-collapse: collapse; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        th { background: #6b21a8; color: white; padding: 12px; text-align: left; }
+        td { padding: 10px; border-bottom: 1px solid #ddd; }
+        tr:hover { background: #f9f9f9; }
+        .status-200 { color: #16a34a; font-weight: bold; }
+        .status-300 { color: #ca8a04; font-weight: bold; }
+        .status-400 { color: #dc2626; font-weight: bold; }
+        .status-500 { color: #991b1b; font-weight: bold; }
+        .conditions { color: #16a34a; font-weight: bold; }
+        .error { color: #dc2626; }
+    </style>
+</head>
+<body>
+    <h1>🧙‍♂️ Avada Kedavra Fuzzing Report</h1>
+    <div class="info">
+        <strong>Generated:</strong> 2026-02-06 14:23:33<br>
+        <strong>Total Requests:</strong> 4
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Payload</th>
+                <th>Method</th>
+                <th>URL</th>
+                <th>Status</th>
+                <th>Size (B)</th>
+                <th>Time (s)</th>
+                <th>Conditions/Error</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>1</td>
+                <td>test@example.com</td>
+                <td>POST</td>
+                <td>https://httpbin.org/post</td>
+                <td class="status-200">200</td>
+                <td>557</td>
+                <td>0.977</td>
+                <td><span class="conditions">✓ Body:'email' | Status=200 | Size>100</span></td>
+            </tr>
+            <tr>
+                <td>2</td>
+                <td>admin@test.com</td>
+                <td>POST</td>
+                <td>https://httpbin.org/post</td>
+                <td class="status-200">200</td>
+                <td>553</td>
+                <td>1.563</td>
+                <td><span class="conditions">✓ Body:'email' | Status=200 | Size>100</span></td>
+            </tr>
+            <tr>
+                <td>3</td>
+                <td>user@domain.com</td>
+                <td>POST</td>
+                <td>https://httpbin.org/post</td>
+                <td class="status-200">200</td>
+                <td>555</td>
+                <td>0.035</td>
+                <td><span class="conditions">✓ Body:'email' | Status=200 | Size>100</span></td>
+            </tr>
+            <tr>
+                <td>4</td>
+                <td>fuzz@security.test</td>
+                <td>POST</td>
+                <td>https://httpbin.org/post</td>
+                <td class="status-200">200</td>
+                <td>561</td>
+                <td>0.527</td>
+                <td><span class="conditions">✓ Body:'email' | Status=200 | Size>100</span></td>
+            </tr>
+        </tbody>
+    </table>
+</body>
+</html>

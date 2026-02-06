@@ -1,0 +1,15 @@
+rules:
+  # Test ALL mode - this should NOT show anything because not all conditions match
+  - filter:
+      method: POST
+    target:
+      type: body
+      name: email
+    payloads:
+      type: file
+      source: 'emails.txt'
+    conditions:
+      match_mode: "all"  # Only show if ALL conditions match
+      status_code: 200
+      string_in_body: "email"
+      content_length_gt: 10000  # This will NOT match (responses are ~550 bytes)

@@ -1,0 +1,4 @@
+test@example.com
+admin@test.com
+user@domain.com
+fuzz@security.test

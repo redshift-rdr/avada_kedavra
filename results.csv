@@ -1,0 +1,5 @@
+id,payload,method,url,status_code,content_length,response_time,error,conditions_matched
+1,test@example.com,POST,https://httpbin.org/post,200,557,0.140,,Body:'email' | Status=200 | Size>100
+2,admin@test.com,POST,https://httpbin.org/post,200,553,0.036,,Body:'email' | Status=200 | Size>100
+3,user@domain.com,POST,https://httpbin.org/post,502,122,0.229,,Size>100
+4,fuzz@security.test,POST,https://httpbin.org/post,200,561,0.037,,Body:'email' | Status=200 | Size>100
