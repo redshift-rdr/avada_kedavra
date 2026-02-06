@@ -1,0 +1,290 @@
+[
+  {
+    "headers": [
+      "POST /rest/user/login HTTP/1.1",
+      "Host: 127.0.0.1:3000",
+      "User-Agent: Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:136.0) Gecko/20100101 Firefox/136.0",
+      "Accept: application/json, text/plain, */*",
+      "Accept-Language: en-GB,en;q=0.5",
+      "Accept-Encoding: gzip, deflate, br",
+      "Content-Type: application/json",
+      "Content-Length: 34",
+      "Origin: http://127.0.0.1:3000",
+      "Connection: keep-alive",
+      "Referer: http://127.0.0.1:3000/",
+      "Cookie: language=en; welcomebanner_status=dismiss; cookieconsent_status=dismiss",
+      "Sec-Fetch-Dest: empty",
+      "Sec-Fetch-Mode: cors",
+      "Sec-Fetch-Site: same-origin",
+      "X-PwnFox-Color: blue",
+      "Priority: u=0"
+    ],
+    "hashkey": -1847949532,
+    "method": "POST",
+    "params": [
+      {
+        "type": "cookie",
+        "name": "language",
+        "value": "en"
+      },
+      {
+        "type": "cookie",
+        "name": "welcomebanner_status",
+        "value": "dismiss"
+      },
+      {
+        "type": "cookie",
+        "name": "cookieconsent_status",
+        "value": "dismiss"
+      },
+      {
+        "type": "json",
+        "name": "email",
+        "value": "test"
+      },
+      {
+        "type": "json",
+        "name": "password",
+        "value": "test"
+      }
+    ],
+    "url": "http://127.0.0.1:3000/rest/user/login"
+  },
+  {
+    "headers": [
+      "GET /rest/user/whoami HTTP/1.1",
+      "Host: 127.0.0.1:3000",
+      "User-Agent: Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:136.0) Gecko/20100101 Firefox/136.0",
+      "Accept: application/json, text/plain, */*",
+      "Accept-Language: en-GB,en;q=0.5",
+      "Accept-Encoding: gzip, deflate, br",
+      "Connection: keep-alive",
+      "Referer: http://127.0.0.1:3000/",
+      "Cookie: language=en; welcomebanner_status=dismiss; cookieconsent_status=dismiss",
+      "Sec-Fetch-Dest: empty",
+      "Sec-Fetch-Mode: cors",
+      "Sec-Fetch-Site: same-origin",
+      "X-PwnFox-Color: blue",
+      "If-None-Match: W/\"b-/5bSboVjVhGw3qRgvUfZjE1r1Ns\"",
+      "Priority: u=0"
+    ],
+    "hashkey": -599758943,
+    "method": "GET",
+    "params": [
+      {
+        "type": "cookie",
+        "name": "language",
+        "value": "en"
+      },
+      {
+        "type": "cookie",
+        "name": "welcomebanner_status",
+        "value": "dismiss"
+      },
+      {
+        "type": "cookie",
+        "name": "cookieconsent_status",
+        "value": "dismiss"
+      }
+    ],
+    "url": "http://127.0.0.1:3000/rest/user/whoami"
+  },
+  {
+    "headers": [
+      "GET /rest/user/whoami HTTP/1.1",
+      "Host: 127.0.0.1:3000",
+      "User-Agent: Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:136.0) Gecko/20100101 Firefox/136.0",
+      "Accept: application/json, text/plain, */*",
+      "Accept-Language: en-GB,en;q=0.5",
+      "Accept-Encoding: gzip, deflate, br",
+      "Connection: keep-alive",
+      "Referer: http://127.0.0.1:3000/",
+      "Cookie: language=en; welcomebanner_status=dismiss; cookieconsent_status=dismiss",
+      "Sec-Fetch-Dest: empty",
+      "Sec-Fetch-Mode: cors",
+      "Sec-Fetch-Site: same-origin",
+      "X-PwnFox-Color: blue",
+      "Priority: u=0"
+    ],
+    "hashkey": -599758943,
+    "method": "GET",
+    "params": [
+      {
+        "type": "cookie",
+        "name": "language",
+        "value": "en"
+      },
+      {
+        "type": "cookie",
+        "name": "welcomebanner_status",
+        "value": "dismiss"
+      },
+      {
+        "type": "cookie",
+        "name": "cookieconsent_status",
+        "value": "dismiss"
+      }
+    ],
+    "url": "http://127.0.0.1:3000/rest/user/whoami"
+  },
+  {
+    "headers": [
+      "GET /rest/products/search?q= HTTP/1.1",
+      "Host: 127.0.0.1:3000",
+      "User-Agent: Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:136.0) Gecko/20100101 Firefox/136.0",
+      "Accept: application/json, text/plain, */*",
+      "Accept-Language: en-GB,en;q=0.5",
+      "Accept-Encoding: gzip, deflate, br",
+      "Connection: keep-alive",
+      "Referer: http://127.0.0.1:3000/",
+      "Cookie: language=en; welcomebanner_status=dismiss; cookieconsent_status=dismiss",
+      "Sec-Fetch-Dest: empty",
+      "Sec-Fetch-Mode: cors",
+      "Sec-Fetch-Site: same-origin",
+      "X-PwnFox-Color: blue",
+      "If-None-Match: W/\"354c-tWS5VKFDPjqL6fPXTX3M9bk8alY\"",
+      "Priority: u=0"
+    ],
+    "hashkey": 1287257068,
+    "method": "GET",
+    "params": [
+      {
+        "type": "url",
+        "name": "q",
+        "value": ""
+      },
+      {
+        "type": "cookie",
+        "name": "language",
+        "value": "en"
+      },
+      {
+        "type": "cookie",
+        "name": "welcomebanner_status",
+        "value": "dismiss"
+      },
+      {
+        "type": "cookie",
+        "name": "cookieconsent_status",
+        "value": "dismiss"
+      }
+    ],
+    "url": "http://127.0.0.1:3000/rest/products/search?q="
+  },
+  {
+    "headers": [
+      "GET /api/Quantitys/ HTTP/1.1",
+      "Host: 127.0.0.1:3000",
+      "User-Agent: Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:136.0) Gecko/20100101 Firefox/136.0",
+      "Accept: application/json, text/plain, */*",
+      "Accept-Language: en-GB,en;q=0.5",
+      "Accept-Encoding: gzip, deflate, br",
+      "Connection: keep-alive",
+      "Referer: http://127.0.0.1:3000/",
+      "Cookie: language=en; welcomebanner_status=dismiss; cookieconsent_status=dismiss",
+      "Sec-Fetch-Dest: empty",
+      "Sec-Fetch-Mode: cors",
+      "Sec-Fetch-Site: same-origin",
+      "X-PwnFox-Color: blue",
+      "If-None-Match: W/\"17ec-2kkVp6xYoae48aTGzow4qLu4+0E\"",
+      "Priority: u=0"
+    ],
+    "hashkey": -1384159947,
+    "method": "GET",
+    "params": [
+      {
+        "type": "cookie",
+        "name": "language",
+        "value": "en"
+      },
+      {
+        "type": "cookie",
+        "name": "welcomebanner_status",
+        "value": "dismiss"
+      },
+      {
+        "type": "cookie",
+        "name": "cookieconsent_status",
+        "value": "dismiss"
+      }
+    ],
+    "url": "http://127.0.0.1:3000/api/Quantitys/"
+  },
+  {
+    "headers": [
+      "GET /rest/products/1/reviews HTTP/1.1",
+      "Host: 127.0.0.1:3000",
+      "User-Agent: Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:136.0) Gecko/20100101 Firefox/136.0",
+      "Accept: application/json, text/plain, */*",
+      "Accept-Language: en-GB,en;q=0.5",
+      "Accept-Encoding: gzip, deflate, br",
+      "Connection: keep-alive",
+      "Referer: http://127.0.0.1:3000/",
+      "Cookie: language=en; welcomebanner_status=dismiss; cookieconsent_status=dismiss",
+      "Sec-Fetch-Dest: empty",
+      "Sec-Fetch-Mode: cors",
+      "Sec-Fetch-Site: same-origin",
+      "X-PwnFox-Color: blue",
+      "If-None-Match: W/\"ac-JLa11yhSiAYwxW0xqcz0ixQ6DJA\"",
+      "Priority: u=0"
+    ],
+    "hashkey": 811851040,
+    "method": "GET",
+    "params": [
+      {
+        "type": "cookie",
+        "name": "language",
+        "value": "en"
+      },
+      {
+        "type": "cookie",
+        "name": "welcomebanner_status",
+        "value": "dismiss"
+      },
+      {
+        "type": "cookie",
+        "name": "cookieconsent_status",
+        "value": "dismiss"
+      }
+    ],
+    "url": "http://127.0.0.1:3000/rest/products/1/reviews"
+  },
+  {
+    "headers": [
+      "GET /rest/products/1/reviews HTTP/1.1",
+      "Host: 127.0.0.1:3000",
+      "User-Agent: Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:136.0) Gecko/20100101 Firefox/136.0",
+      "Accept: application/json, text/plain, */*",
+      "Accept-Language: en-GB,en;q=0.5",
+      "Accept-Encoding: gzip, deflate, br",
+      "Connection: keep-alive",
+      "Referer: http://127.0.0.1:3000/",
+      "Cookie: language=en; welcomebanner_status=dismiss; cookieconsent_status=dismiss",
+      "Sec-Fetch-Dest: empty",
+      "Sec-Fetch-Mode: cors",
+      "Sec-Fetch-Site: same-origin",
+      "X-PwnFox-Color: blue",
+      "Priority: u=0"
+    ],
+    "hashkey": 811851040,
+    "method": "GET",
+    "params": [
+      {
+        "type": "cookie",
+        "name": "language",
+        "value": "en"
+      },
+      {
+        "type": "cookie",
+        "name": "welcomebanner_status",
+        "value": "dismiss"
+      },
+      {
+        "type": "cookie",
+        "name": "cookieconsent_status",
+        "value": "dismiss"
+      }
+    ],
+    "url": "http://127.0.0.1:3000/rest/products/1/reviews"
+  }
+]
