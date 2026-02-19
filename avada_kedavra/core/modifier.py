@@ -2,9 +2,72 @@
 """Request modification logic."""
 
 import copy
-from typing import Dict, Optional, Tuple, Any
+from typing import Dict, List, Optional, Tuple, Any
 
 from ..models.request import RequestComponents
+
+
+def is_wildcard_target(target_config) -> bool:
+    """Check if a target config represents a wildcard (all parameters).
+
+    A wildcard target means the rule should apply to all injectable parameters.
+    This is true when:
+    - target_config is None (omitted from rule)
+    - target_config is the string "*"
+    - target_config is a dict with name: "*"
+
+    Args:
+        target_config: The target configuration from a rule.
+
+    Returns:
+        True if this is a wildcard target.
+    """
+    if target_config is None:
+        return True
+    if target_config == '*':
+        return True
+    if isinstance(target_config, dict) and target_config.get('name') == '*':
+        return True
+    return False
+
+
+def collect_all_targets(
+    components: RequestComponents,
+    target_type: Optional[str] = None
+) -> List[Dict[str, str]]:
+    """Collect all injectable parameter targets from request components.
+
+    When no target is specified or a wildcard is used, this function enumerates
+    all parameters in the request that can be targeted for payload injection.
+
+    Args:
+        components: The request components to extract targets from.
+        target_type: Optional type filter. If set, only returns targets of that type.
+            Valid values: 'url', 'cookie', 'header', 'body'.
+
+    Returns:
+        List of target config dicts, each with 'type' and 'name' keys.
+    """
+    targets: List[Dict[str, str]] = []
+
+    if target_type is None or target_type == 'url':
+        for name in components.url_params:
+            targets.append({"type": "url", "name": name})
+
+    if target_type is None or target_type == 'cookie':
+        for name in components.cookies:
+            targets.append({"type": "cookie", "name": name})
+
+    if target_type is None or target_type == 'header':
+        for name in components.headers:
+            targets.append({"type": "header", "name": name})
+
+    if target_type is None or target_type == 'body':
+        if components.has_body_params and components.parsed_body and isinstance(components.parsed_body, dict):
+            for name in components.parsed_body:
+                targets.append({"type": "body", "name": name})
+
+    return targets
 
 
 def apply_modification(

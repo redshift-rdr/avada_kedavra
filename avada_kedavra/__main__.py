@@ -24,7 +24,7 @@ from .core.config import load_config, merge_cli_args
 from .core.request_parser import load_requests, prepare_request_components
 from .core.payload_loader import load_payloads
 from .core.filter import request_matches_filter
-from .core.modifier import apply_modification
+from .core.modifier import apply_modification, is_wildcard_target, collect_all_targets
 from .network.requester import make_request_worker
 from .ui.console import console, create_results_table
 from .models.request import TaskData
@@ -212,7 +212,7 @@ def generate_tasks(
                 payload_config = rule.get('payloads')
                 filter_config = rule.get('filter')
 
-                if not target_config or not payload_config:
+                if not payload_config:
                     continue
 
                 # Check if request matches filter
@@ -237,26 +237,35 @@ def generate_tasks(
                 if not payloads_for_rule:
                     continue
 
-                for payload in payloads_for_rule:
-                    stats['total_potential'] += 1
-                    modified_components, success = apply_modification(
-                        base_components, target_config, payload
-                    )
+                # Resolve target configs: expand wildcards to all parameters
+                if is_wildcard_target(target_config):
+                    # No target or wildcard: target all parameters
+                    wildcard_type = target_config.get('type') if isinstance(target_config, dict) else None
+                    resolved_targets = collect_all_targets(base_components, wildcard_type)
+                else:
+                    resolved_targets = [target_config]
 
-                    if success:
-                        # Get conditions from the rule
-                        rule_conditions = rule.get('conditions')
+                for actual_target in resolved_targets:
+                    for payload in payloads_for_rule:
+                        stats['total_potential'] += 1
+                        modified_components, success = apply_modification(
+                            base_components, actual_target, payload
+                        )
 
-                        tasks_to_run.append(TaskData(
-                            id=request_id_counter,
-                            components=modified_components,
-                            payload_str=payload,
-                            conditions=rule_conditions,
-                            base_components=base_components  # Store original for baseline matching
-                        ))
-                        request_id_counter += 1
-                    else:
-                        stats['skipped_target'] += 1
+                        if success:
+                            # Get conditions from the rule
+                            rule_conditions = rule.get('conditions')
+
+                            tasks_to_run.append(TaskData(
+                                id=request_id_counter,
+                                components=modified_components,
+                                payload_str=payload,
+                                conditions=rule_conditions,
+                                base_components=base_components  # Store original for baseline matching
+                            ))
+                            request_id_counter += 1
+                        else:
+                            stats['skipped_target'] += 1
         else:
             # No modifications, just replay base request
             tasks_to_run.append(TaskData(

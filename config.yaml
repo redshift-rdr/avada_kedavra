@@ -94,6 +94,34 @@ rules:
   #     content_length_gt: 500
   #     response_time_gt: 0.1
 
+  # Rule 6: Target ALL parameters (no target = wildcard)
+  # Omitting 'target' applies the payload to every parameter in the request
+  # (url params, cookies, headers, and body params), one at a time.
+  # - filter:
+  #     method: POST
+  #   payloads:
+  #     type: list
+  #     source:
+  #       - "' OR '1'='1"
+  #       - "<script>alert(1)</script>"
+
+  # Rule 7: Explicit wildcard - same as omitting target
+  # - target: "*"
+  #   payloads:
+  #     type: list
+  #     source:
+  #       - "{{payload}}"
+
+  # Rule 8: Wildcard within a specific type - target all body params
+  # - target:
+  #     type: body
+  #     name: "*"
+  #   payloads:
+  #     type: list
+  #     source:
+  #       - "' OR '1'='1"
+  #       - "admin'--"
+
 # --- Optional Global Settings ---
 # threads: 10
 # delay: 0.1
@@ -133,6 +161,25 @@ rules:
 # WAF Detection:
 #   - Identifies common WAF signatures (Cloudflare, Akamai, etc.)
 #   - Shows: WAF:CLOUDFLARE | WAF:MODSECURITY
+
+# --- Flexible Filter & Target Reference ---
+# Filter:
+#   - Omit 'filter' entirely → rule applies to ALL requests
+#   - Set specific filters → rule only applies to matching requests
+#
+# Target:
+#   - Omit 'target' entirely → payload injected into every parameter, one at a time
+#   - target: "*"            → same as omitting target (explicit wildcard)
+#   - target:
+#       type: body           → target all body params (type-scoped wildcard)
+#       name: "*"
+#   - target:
+#       type: url            → target a specific parameter
+#       name: id
+#
+# When using wildcards, each parameter gets its own request with the payload
+# injected only into that parameter (sniper mode). Parameters include:
+# url params, cookies, headers, and body params (json/form).
 
 # --- Response Conditions Reference ---
 # Conditions can be added to any rule to check response characteristics.
