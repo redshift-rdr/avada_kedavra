@@ -30,3 +30,8 @@ class FilterError(AvadaKedavraError):
 class ModificationError(AvadaKedavraError):
     """Raised when request modification fails."""
     pass
+
+
+class AuthenticationError(AvadaKedavraError):
+    """Raised when authentication or re-authentication fails."""
+    pass

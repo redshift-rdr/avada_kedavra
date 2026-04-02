@@ -2,6 +2,8 @@
 """Main entry point for avada_kedavra HTTP request fuzzing tool."""
 
 import sys
+import os
+import select
 import time
 import threading
 import argparse
@@ -28,11 +30,13 @@ from .core.modifier import apply_modification, is_wildcard_target, collect_all_t
 from .network.requester import make_request_worker
 from .ui.console import console, create_results_table
 from .models.request import TaskData
+from .core.auth_handler import AuthHandler
 from .utils.exceptions import (
     AvadaKedavraError,
     ConfigurationError,
     RequestParsingError,
-    PayloadLoadError
+    PayloadLoadError,
+    AuthenticationError
 )
 
 
@@ -136,6 +140,16 @@ Examples:
         "--waf-detect",
         action="store_true",
         help="Attempt to detect Web Application Firewall (WAF) presence"
+    )
+    parser.add_argument(
+        "--continue-on-auth-errors",
+        action="store_true",
+        help="Continue scanning on 401/403 errors instead of pausing (when no auth config set)"
+    )
+    parser.add_argument(
+        "--no-live",
+        action="store_true",
+        help="Disable Rich live table display. Shows simple progress; press Enter for status updates."
     )
 
     # Misc
@@ -279,6 +293,88 @@ def generate_tasks(
     return tasks_to_run, stats
 
 
+class _SimpleProgressTracker:
+    """Thread-safe progress counter for --no-live mode."""
+
+    def __init__(self, total: int):
+        self.total = total
+        self.completed = 0
+        self._lock = threading.Lock()
+        self._start_time = time.monotonic()
+        self._error_count = 0
+
+    def advance(self) -> None:
+        with self._lock:
+            self.completed += 1
+
+    def record_error(self) -> None:
+        with self._lock:
+            self._error_count += 1
+
+    def get_status(self) -> str:
+        with self._lock:
+            elapsed = time.monotonic() - self._start_time
+            pct = (self.completed / self.total * 100) if self.total > 0 else 0
+            rate = self.completed / elapsed if elapsed > 0 else 0
+            remaining = (self.total - self.completed) / rate if rate > 0 else 0
+            parts = [
+                f"Progress: {self.completed}/{self.total} ({pct:.1f}%)",
+                f"Elapsed: {elapsed:.1f}s",
+                f"Rate: {rate:.1f} req/s",
+                f"ETA: {remaining:.1f}s",
+            ]
+            if self._error_count > 0:
+                parts.append(f"Errors: {self._error_count}")
+            return " | ".join(parts)
+
+    def update(self, task_id: Any, advance: int = 1) -> None:
+        """Compatible with Rich Progress.update() signature."""
+        for _ in range(advance):
+            self.advance()
+
+
+class _NullTable:
+    """No-op replacement for Rich Table when --no-live is active.
+
+    Workers check hasattr(live_table, 'add_row'), which returns True here
+    but the method does nothing.
+    """
+    def add_row(self, *args, **kwargs) -> None:
+        pass
+
+    @property
+    def rows(self):
+        return []
+
+
+def _run_keypress_listener(
+    tracker: _SimpleProgressTracker,
+    stop_event: threading.Event
+) -> None:
+    """Listen for Enter keypresses and print progress status.
+
+    Works cross-platform: on Unix uses select() on stdin;
+    on Windows falls back to msvcrt.
+    """
+    try:
+        if os.name == 'nt':
+            import msvcrt
+            while not stop_event.is_set():
+                if msvcrt.kbhit():
+                    msvcrt.getwch()  # consume the keypress
+                    print(f"\r{tracker.get_status()}")
+                stop_event.wait(0.1)
+        else:
+            while not stop_event.is_set():
+                readable, _, _ = select.select([sys.stdin], [], [], 0.2)
+                if readable:
+                    sys.stdin.readline()  # consume the line
+                    print(f"\r{tracker.get_status()}")
+    except (OSError, ValueError):
+        # stdin closed or not a real terminal — silently stop
+        pass
+
+
 def execute_tasks(
     tasks: List[TaskData],
     config,
@@ -346,6 +442,12 @@ def execute_tasks(
     if auto_throttle or waf_detect:
         rate_limiter_instance = RateLimiter(base_delay=config.delay)
 
+    # Initialize authentication handler
+    auth_handler_instance = None
+    auth_error_event = threading.Event()
+    if config.auth:
+        auth_handler_instance = AuthHandler(config.auth)
+
     # Print active Phase 1 features
     active_features = []
     if baseline_mode:
@@ -362,23 +464,22 @@ def execute_tasks(
     if active_features:
         console.print(f"[bold green]Phase 1 Features:[/bold green] {', '.join(active_features)}")
 
+    # Perform initial authentication if configured
+    if auth_handler_instance:
+        console.print(f"[cyan]Authentication:[/cyan] {config.auth.auth_type.value} via {config.auth.login_url or 'static key'}")
+        try:
+            auth_handler_instance.perform_login(
+                requests.Session(),
+                proxies=proxies,
+                verify_ssl=config.verify_ssl,
+                timeout=config.timeout
+            )
+            console.print("[bold green]Initial authentication successful.[/bold green]")
+        except AuthenticationError as e:
+            console.print(f"[bold red]Initial authentication failed:[/bold red] {e}")
+            return []
+
     console.print(f"[cyan]Preparing to send {total_requests} requests using {config.threads} threads...[/cyan]")
-
-    # Create progress bar and results table
-    progress = Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        TextColumn("({task.completed} of {task.total})"),
-        TimeRemainingColumn(),
-        TimeElapsedColumn(),
-        console=console
-    )
-
-    task_id = progress.add_task("[green]Sending Requests", total=total_requests)
-    results_table = create_results_table()
-    render_group = Group(progress, results_table)
 
     # Threading coordination
     threads: List[threading.Thread] = []
@@ -386,39 +487,80 @@ def execute_tasks(
     rich_lock = threading.Lock()
     results_collector: List[Dict[str, Any]] = []  # Collect results for export
     baseline_miss_counter = {'count': 0}  # Track missing baselines for diff analysis
+    scan_stopped_early = False
 
-    with Live(render_group, refresh_per_second=10, console=console, vertical_overflow="visible"):
-        session = requests.Session()
+    def _make_worker_args(task_data: TaskData, live_table, progress_obj, progress_task_id) -> tuple:
+        """Build the args tuple for make_request_worker."""
+        return (
+            task_data.id,
+            task_data.components,
+            task_data.payload_str,
+            session,
+            config,
+            live_table,
+            progress_obj,
+            progress_task_id,
+            proxies,
+            rich_lock,
+            task_data.conditions,
+            results_collector,
+            baseline_store,
+            diff_analyzer_instance,
+            reflection_detector_instance,
+            rate_limiter_instance,
+            baseline_mode,
+            task_data.base_components,
+            baseline_miss_counter,
+            auth_handler_instance,
+            config.continue_on_auth_errors,
+            auth_error_event
+        )
 
-        # Main execution loop
+    def _handle_auth_error_pause(live_obj=None) -> bool:
+        """Handle auth error pause prompt. Returns True if scan should stop."""
+        nonlocal scan_stopped_early
+
+        if not (auth_error_event.is_set() and not auth_handler_instance and not config.continue_on_auth_errors):
+            return False
+
+        # Wait for in-flight threads to finish
+        for t in threads:
+            t.join(timeout=config.timeout + 2)
+
+        # Pause Live display if active
+        if live_obj is not None:
+            live_obj.stop()
+
+        console.print("\n[bold yellow]Authentication error (401) detected. No auth config set.[/bold yellow]")
+        try:
+            answer = console.input("[yellow]Continue scanning? [y/N]: [/yellow]").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            answer = "n"
+
+        if answer in ('y', 'yes'):
+            config.continue_on_auth_errors = True
+            auth_error_event.clear()
+            if live_obj is not None:
+                live_obj.start()
+            return False
+        else:
+            console.print("[bold red]Scan stopped by user.[/bold red]")
+            scan_stopped_early = True
+            return True
+
+    def _run_main_loop(live_table, progress_obj, progress_task_id, live_obj=None):
+        """Main execution loop shared by both live and no-live modes."""
+        nonlocal task_index, scan_stopped_early
+
         while task_index < total_requests or any(t.is_alive() for t in threads):
-            # Start new threads up to the limit
+            if _handle_auth_error_pause(live_obj):
+                break
+
             while task_index < total_requests and (threading.active_count() - 1 < config.threads):
                 task_data = tasks[task_index]
-
                 thread = threading.Thread(
                     target=make_request_worker,
-                    args=(
-                        task_data.id,
-                        task_data.components,
-                        task_data.payload_str,
-                        session,
-                        config,
-                        results_table,
-                        progress,
-                        task_id,
-                        proxies,
-                        rich_lock,
-                        task_data.conditions,
-                        results_collector,
-                        baseline_store,
-                        diff_analyzer_instance,
-                        reflection_detector_instance,
-                        rate_limiter_instance,
-                        baseline_mode,
-                        task_data.base_components,  # Pass base components for baseline matching
-                        baseline_miss_counter  # Track missing baselines
-                    ),
+                    args=_make_worker_args(task_data, live_table, progress_obj, progress_task_id),
                     daemon=True
                 )
                 threads.append(thread)
@@ -428,10 +570,57 @@ def execute_tasks(
                 if config.delay > 0:
                     time.sleep(config.delay)
 
-            # Small sleep to prevent busy waiting
             time.sleep(0.05)
 
-    console.print(f"[bold green]Completed {total_requests} requests.[/bold green]")
+    session = requests.Session()
+
+    if config.no_live:
+        # Simple mode: no Rich Live table
+        simple_tracker = _SimpleProgressTracker(total_requests)
+        null_table = _NullTable()
+
+        console.print("[cyan]Scanning... press Enter for status updates.[/cyan]")
+
+        # Start keypress listener
+        keypress_stop = threading.Event()
+        keypress_thread = threading.Thread(
+            target=_run_keypress_listener,
+            args=(simple_tracker, keypress_stop),
+            daemon=True
+        )
+        keypress_thread.start()
+
+        _run_main_loop(null_table, simple_tracker, None)
+
+        # Stop keypress listener
+        keypress_stop.set()
+        keypress_thread.join(timeout=1)
+
+        # Print final status
+        console.print(f"\r{simple_tracker.get_status()}")
+    else:
+        # Rich Live mode
+        progress = Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            TextColumn("({task.completed} of {task.total})"),
+            TimeRemainingColumn(),
+            TimeElapsedColumn(),
+            console=console
+        )
+        progress_task_id = progress.add_task("[green]Sending Requests", total=total_requests)
+        results_table = create_results_table()
+        render_group = Group(progress, results_table)
+
+        with Live(render_group, refresh_per_second=10, console=console, vertical_overflow="visible") as live:
+            _run_main_loop(results_table, progress, progress_task_id, live)
+
+    if scan_stopped_early:
+        console.print(f"[bold yellow]Completed {task_index} of {total_requests} requests before stopping.[/bold yellow]")
+    else:
+        console.print(f"[bold green]Completed {total_requests} requests.[/bold green]")
 
     # Save baselines if in baseline mode
     if baseline_mode and baseline_store:
@@ -455,6 +644,17 @@ def execute_tasks(
         if stats['detected']:
             console.print(f"[bold yellow]Rate Limiting:[/bold yellow] Detected {stats['detection_count']} times, "
                          f"current delay: {stats['current_delay']:.2f}s")
+
+    # Print auth statistics if enabled
+    if auth_handler_instance:
+        auth_stats = auth_handler_instance.get_statistics()
+        if auth_stats['successful_auths'] > 1 or auth_stats['failed_auths'] > 0:
+            console.print(
+                f"[bold cyan]Authentication:[/bold cyan] "
+                f"{auth_stats['successful_auths']} successful, "
+                f"{auth_stats['failed_auths']} failed "
+                f"(type: {auth_stats['auth_type']})"
+            )
 
     # Export results if output file specified
     if output_file and results_collector:

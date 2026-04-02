@@ -2,7 +2,10 @@
 """Data models for HTTP request components."""
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Literal, Any
+from typing import Dict, List, Optional, Literal, Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .auth import AuthConfig
 
 
 @dataclass
@@ -49,6 +52,9 @@ class AppConfig:
     delay: float = 0.0
     proxy: Optional[str] = None
     rules: List[Dict[str, Any]] = field(default_factory=list)
+    auth: Optional['AuthConfig'] = None
+    continue_on_auth_errors: bool = False
+    no_live: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for backward compatibility."""

@@ -16,6 +16,7 @@ from ..core.condition_checker import check_conditions, format_condition_matches
 from ..core.diff_analyzer import DifferentialAnalyzer, create_request_id
 from ..core.reflection_detector import ReflectionDetector
 from ..core.rate_limiter import RateLimiter
+from ..core.auth_handler import AuthHandler
 
 
 def make_request_worker(
@@ -37,7 +38,10 @@ def make_request_worker(
     rate_limiter: Optional[RateLimiter] = None,
     baseline_mode: bool = False,
     base_components: Optional[RequestComponents] = None,
-    baseline_miss_counter: Optional[Dict[str, int]] = None
+    baseline_miss_counter: Optional[Dict[str, int]] = None,
+    auth_handler: Optional[AuthHandler] = None,
+    continue_on_auth_errors: bool = False,
+    auth_error_event: Optional[threading.Event] = None
 ) -> None:
     """Execute a single HTTP request in a worker thread.
 
@@ -61,6 +65,9 @@ def make_request_worker(
         baseline_mode: Whether running in baseline capture mode.
         base_components: Optional original (unmodified) components for baseline matching.
         baseline_miss_counter: Optional dict to track baseline matching failures.
+        auth_handler: Optional auth handler for credential injection and re-auth.
+        continue_on_auth_errors: If True, 401s without auth config are logged but don't pause.
+        auth_error_event: Optional threading Event set when unhandled 401 is detected (signals main loop).
     """
     start_time = time.monotonic()
     status_code: Optional[int] = None
@@ -74,58 +81,109 @@ def make_request_worker(
     if components.url_params:
         display_url += '?' + urlencode(components.url_params, doseq=True)
 
-    try:
-        # Build request arguments
-        request_args: Dict[str, Any] = {
+    auth_display = ""
+
+    def _build_request_args() -> Dict[str, Any]:
+        """Build request arguments, injecting auth credentials if available."""
+        args: Dict[str, Any] = {
             'method': components.method,
             'url': components.base_url,
             'params': components.url_params,
-            'headers': components.headers,
-            'cookies': components.cookies,
+            'headers': dict(components.headers),  # Copy so auth injection doesn't mutate
+            'cookies': dict(components.cookies),
             'allow_redirects': config.allow_redirects,
             'verify': config.verify_ssl,
             'timeout': config.timeout,
             'proxies': proxies
         }
 
+        # Inject auth credentials
+        if auth_handler:
+            auth_creds = auth_handler.get_auth_credentials()
+            if 'headers' in auth_creds:
+                args['headers'].update(auth_creds['headers'])
+            if 'cookies' in auth_creds:
+                args['cookies'].update(auth_creds['cookies'])
+
+        return args
+
+    def _apply_body(args: Dict[str, Any]) -> None:
+        """Apply body data to request arguments."""
+        nonlocal error_message
         body_type = components.body_type
         parsed_body = components.parsed_body
         raw_body = components.raw_body
 
-        # Handle JSON body
         if body_type == 'json' and parsed_body is not None:
-            request_args['json'] = parsed_body
-            if 'application/json' not in request_args['headers'].get('Content-Type', '').lower():
-                request_args['headers']['Content-Type'] = 'application/json'
-
-        # Handle form body
+            args['json'] = parsed_body
+            if 'application/json' not in args['headers'].get('Content-Type', '').lower():
+                args['headers']['Content-Type'] = 'application/json'
         elif body_type == 'form' and parsed_body is not None:
             try:
                 form_data = urlencode(parsed_body, doseq=True)
-                request_args['data'] = form_data.encode('utf-8')
-                if 'application/x-www-form-urlencoded' not in request_args['headers'].get('Content-Type', '').lower():
-                    request_args['headers']['Content-Type'] = 'application/x-www-form-urlencoded'
+                args['data'] = form_data.encode('utf-8')
+                if 'application/x-www-form-urlencoded' not in args['headers'].get('Content-Type', '').lower():
+                    args['headers']['Content-Type'] = 'application/x-www-form-urlencoded'
             except Exception as e:
                 error_message = f"Failed to serialize form body: {e}. Sending raw."
-                body_type = 'raw'
-                raw_body = str(parsed_body)
+                body_type_fallback = 'raw'
+                raw_body_fallback = str(parsed_body)
+                args['data'] = raw_body_fallback.encode('utf-8')
+                return
 
-        # Handle raw/multipart body
         if body_type in ('raw', 'multipart') and raw_body is not None:
-            request_args['data'] = raw_body.encode('utf-8') if isinstance(raw_body, str) else raw_body
+            args['data'] = raw_body.encode('utf-8') if isinstance(raw_body, str) else raw_body
 
-        # Execute request
+    def _execute_request() -> None:
+        """Execute the HTTP request and capture response data."""
+        nonlocal status_code, response_size, error_message, response_body, response_headers
+
+        request_args = _build_request_args()
+        _apply_body(request_args)
+
         response = session.request(**request_args)
         status_code = response.status_code
         response_size = len(response.content) if response.content else 0
 
-        # Capture response data for condition checking
         try:
             response_body = response.text
         except Exception:
             response_body = ""
 
         response_headers = dict(response.headers)
+
+    try:
+        _execute_request()
+
+        # Auth failure detection and re-auth retry
+        if status_code and auth_handler and auth_handler.is_auth_failure(status_code):
+            # Attempt re-authentication (thread-safe: only one thread re-auths)
+            reauth_ok = auth_handler.attempt_reauth(
+                session,
+                proxies=proxies,
+                verify_ssl=config.verify_ssl,
+                timeout=config.timeout
+            )
+            if reauth_ok:
+                # Retry the request with fresh credentials
+                status_code = None
+                response_size = None
+                response_body = ""
+                response_headers = {}
+                error_message = ""
+                _execute_request()
+                auth_display = "[RE-AUTH OK]"
+            else:
+                auth_display = "[AUTH FAILED]"
+                error_message = f"{error_message} [AUTH FAILED]" if error_message else "Auth failed - max retries exceeded"
+
+        elif status_code and not auth_handler and status_code in (401, 403):
+            # No auth handler configured — signal unhandled auth error
+            if continue_on_auth_errors:
+                auth_display = "[401 AUTH ERROR]"
+            elif auth_error_event is not None:
+                auth_error_event.set()
+                auth_display = "[AUTH ERROR - PAUSED]"
 
     except requests.exceptions.Timeout:
         error_message = "Timeout"
@@ -262,6 +320,12 @@ def make_request_worker(
         if condition_match_display:
             analysis_parts.append(f"[bold green]✓ {condition_match_display}[/bold green]")
 
+        if auth_display:
+            if "FAILED" in auth_display or "ERROR" in auth_display:
+                analysis_parts.append(f"[bold red]{auth_display}[/bold red]")
+            else:
+                analysis_parts.append(f"[bold cyan]{auth_display}[/bold cyan]")
+
         combined_display = " | ".join(analysis_parts) if analysis_parts else ""
 
         # Add row to results table
@@ -302,6 +366,7 @@ def make_request_worker(
                 'conditions_matched': condition_match_display,
                 'diff_analysis': diff_display,
                 'reflection_detected': reflection_display,
-                'waf_detected': waf_detected if waf_detected else ''
+                'waf_detected': waf_detected if waf_detected else '',
+                'auth_status': auth_display
             }
             results_collector.append(result_data)

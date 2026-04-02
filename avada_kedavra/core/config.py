@@ -7,6 +7,7 @@ from typing import Optional, Dict, Any
 from rich.console import Console
 
 from ..models.request import AppConfig
+from ..models.auth import parse_auth_config
 from ..utils.exceptions import ConfigurationError
 
 console = Console()
@@ -41,6 +42,14 @@ def load_config(filepath: Optional[str]) -> AppConfig:
         if 'rules' in config_data and not isinstance(config_data.get('rules'), list):
             raise ConfigurationError("'rules' key in config must be a list.")
 
+        # Parse auth config if present
+        auth_config = None
+        if 'auth' in config_data and isinstance(config_data['auth'], dict):
+            try:
+                auth_config = parse_auth_config(config_data['auth'])
+            except ValueError as e:
+                raise ConfigurationError(f"Invalid auth configuration: {e}")
+
         # Build AppConfig from loaded data
         return AppConfig(
             timeout=config_data.get('timeout', 10),
@@ -49,7 +58,9 @@ def load_config(filepath: Optional[str]) -> AppConfig:
             threads=config_data.get('threads', 5),
             delay=config_data.get('delay', 0.0),
             proxy=config_data.get('proxy'),
-            rules=config_data.get('rules', [])
+            rules=config_data.get('rules', []),
+            auth=auth_config,
+            continue_on_auth_errors=config_data.get('continue_on_auth_errors', False)
         )
 
     except FileNotFoundError:
@@ -83,5 +94,9 @@ def merge_cli_args(config: AppConfig, args) -> AppConfig:
         config.delay = args.delay
     if hasattr(args, 'proxy') and args.proxy:
         config.proxy = args.proxy
+    if hasattr(args, 'continue_on_auth_errors') and args.continue_on_auth_errors:
+        config.continue_on_auth_errors = True
+    if hasattr(args, 'no_live') and args.no_live:
+        config.no_live = True
 
     return config

@@ -129,6 +129,48 @@ rules:
 # verify_ssl: False
 # timeout: 15
 
+# --- Authentication Configuration ---
+# Automatically re-authenticates on 401 errors during scans.
+# Without this block, 401s pause the scan and prompt the user
+# (or use --continue-on-auth-errors to skip the prompt).
+#
+# auth:
+#   # Bearer token: login to endpoint, extract token from JSON body
+#   type: bearer_token
+#   login_url: https://example.com/api/login
+#   login_method: POST                # default: POST
+#   credentials:
+#     username: admin
+#     password: password123
+#   credentials_format: json          # "json" or "form" (default: json)
+#   token_field: data.access_token    # dot notation for nested fields (default: token)
+#   token_location: body              # "body" or "header" (default: body)
+#   inject_as: header                 # "header" or "cookie" (default: header)
+#   inject_name: Authorization        # header/cookie name (default: Authorization)
+#   inject_prefix: "Bearer "          # prepended to token value (default: "")
+#   max_retries: 3                    # max re-auth attempts (default: 3)
+#   cooldown: 1.0                     # seconds between re-auth attempts (default: 1.0)
+#   auth_failure_codes: [401]         # status codes that trigger re-auth (default: [401])
+#
+# # Session cookie example:
+# auth:
+#   type: session_cookie
+#   login_url: https://example.com/login
+#   credentials:
+#     user: admin
+#     pass: secret
+#   credentials_format: form
+#   token_location: header
+#   token_field: Set-Cookie
+#   inject_as: cookie
+#   inject_name: session_id
+#
+# # Static API key example (no login endpoint, no re-auth possible):
+# auth:
+#   type: api_key
+#   api_key: sk-1234567890abcdef
+#   inject_name: X-API-Key
+
 # --- Phase 1 Security Testing Features ---
 # Enable via CLI arguments:
 #   --baseline-mode          Capture baseline responses without fuzzing
