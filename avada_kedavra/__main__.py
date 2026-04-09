@@ -153,6 +153,13 @@ Examples:
         help="Disable Rich live table display. Shows simple progress; press Enter for status updates."
     )
 
+    # Convenience shortcuts
+    parser.add_argument(
+        "--burp",
+        action="store_true",
+        help="Shortcut: set proxy to http://127.0.0.1:8080 and disable SSL verification"
+    )
+
     # Misc
     parser.add_argument(
         "--version",
@@ -708,9 +715,19 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
+        # Handle --burp convenience flag
+        if args.burp:
+            args.proxy = args.proxy or "http://127.0.0.1:8080"
+            args.no_verify = True
+
         # Load configuration
         config = load_config(args.config)
         config = merge_cli_args(config, args)
+
+        # Suppress InsecureRequestWarning when SSL verification is disabled
+        if not config.verify_ssl:
+            import urllib3
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
         # Setup proxy if specified
         proxies: Optional[Dict[str, str]] = None
