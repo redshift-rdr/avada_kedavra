@@ -1,0 +1,5 @@
+# hsts_check.yaml - Replay requests and check for Strict-Transport-Security header
+
+rules:
+  - conditions:
+      string_in_headers: "Strict-Transport-Security"

